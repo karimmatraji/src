@@ -1,5 +1,5 @@
 import random
-from flask import Flask, request, render_template, redirect, url_for
+from flask import Flask, jsonify, request, render_template, redirect, url_for
 import pandas as pd
 from sqlalchemy import create_engine, MetaData, Table, insert, exc
 from sqlalchemy.sql import func
@@ -10,7 +10,7 @@ from logging.handlers import RotatingFileHandler
 
 app = Flask(__name__)
 
-# Logging
+# Logging setup
 handler = RotatingFileHandler('app.log', maxBytes=10000, backupCount=3)
 handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -22,28 +22,29 @@ logger.addHandler(handler)
 # Database connection
 host = "localhost"
 port = "5432"
-database = "karim_db"
-username = "karim"
+database = "karim_database"
+username = "postgres"
 password = "Karim123*"
 connection_string = f"postgresql+psycopg2://{username}:{password}@{host}:{port}/{database}"
 engine = create_engine(connection_string)
-metadata = MetaData(bind=engine)
+metadata = MetaData()
+metadata.reflect(bind=engine)
 
-# load tables
-experiment = Table('experiment', metadata, autoload_with=engine)
-teams = Table('teams', metadata, autoload_with=engine)
-users = Table('users', metadata, autoload_with=engine)
-media = Table('media', metadata, autoload_with=engine)
-post = Table('post', metadata, autoload_with=engine)
-content = Table('content', metadata, autoload_with=engine)
-comment = Table('comment', metadata, autoload_with=engine)
-likes = Table('likes', metadata, autoload_with=engine)
-tags = Table('tags', metadata, autoload_with=engine)
-collection = Table('collection', metadata, autoload_with=engine)
-business_rule = Table('business_rule', metadata, autoload_with=engine)
-experiment_tag = Table('experiment_tag', metadata, autoload_with=engine)
-scientist = Table('scientist', metadata, autoload_with=engine)
-research_question = Table('research_question', metadata, autoload_with=engine)
+# Load tables
+experiment = metadata.tables['experiment']
+teams = metadata.tables['teams']
+users = metadata.tables['users']
+media = metadata.tables['media']
+post = metadata.tables['post']
+content = metadata.tables['content']
+comment = metadata.tables['comment']
+likes = metadata.tables['likes']
+tags = metadata.tables['tags']
+collection = metadata.tables['collection']
+business_rule = metadata.tables['business_rule']
+experiment_tag = metadata.tables['experiment_tag']
+scientist = metadata.tables['scientist']
+research_question = metadata.tables['research_question']
 
 # Create a Session
 Session = sessionmaker(bind=engine)
@@ -222,5 +223,27 @@ def add_csv():
             return render_template('error.html', error_message=str(e))
     return render_template('add_csv.html')
 
+@app.route('/tables', methods=['GET'])
+def get_tables():
+    tables = metadata.tables.keys()
+    return jsonify({"tables": list(tables)})
+
+@app.route('/query', methods=['GET', 'POST'])
+def query():
+    tables = list(metadata.tables.keys())
+    logger.info(f"Tables: {list(tables)}")
+    table_data = []
+    columns = []
+
+    if request.method == 'POST':
+        table_name = request.form.get('table')
+        if table_name and table_name in metadata.tables:
+            table = metadata.tables[table_name]
+            result = session.execute(table.select()).fetchall()
+            table_data = [dict(row) for row in result]
+            columns = table.columns.keys()
+    
+    return render_template('query.html', tables=tables, table_data=table_data, columns=columns)
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8000, debug=True)
+    app.run(host='0.0.0.0', port=8000, debug=True, use_reloader=False)
