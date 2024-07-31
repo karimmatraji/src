@@ -17,6 +17,30 @@ required_libraries = [
     'sqlalchemy'
 ]
 
+
+# Creating the Database Tables and Database Owner if not exist
+
+app = Flask(__name__)
+
+# Logging
+handler = RotatingFileHandler('app.log', maxBytes=10000, backupCount=3)
+handler.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.addHandler(handler)
+
+# Database connection
+host = "localhost"
+port = "5432"
+database = "karim_database"
+username = "karim"
+password = "Karim123*"
+connection_string = f"postgresql+psycopg2://{username}:{password}@{host}:{port}/{database}"
+engine = create_engine(connection_string)
+metadata = MetaData(bind=engine)
+
 def install_libraries(libraries):
     for lib in libraries:
         subprocess.check_call([sys.executable, "-m", "pip", "install", lib])
@@ -76,29 +100,6 @@ def setup_postgresql():
     execute_bash_command(create_user_db_commands)
 
 setup_postgresql()
-
-# Creating the Database Tables and Database Owner if not exist
-
-app = Flask(__name__)
-
-# Logging
-handler = RotatingFileHandler('app.log', maxBytes=10000, backupCount=3)
-handler.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-logger.addHandler(handler)
-
-# Database connection
-host = "localhost"
-port = "5432"
-database = "karim_db"
-username = "karim"
-password = "Karim123*"
-connection_string = f"postgresql+psycopg2://{username}:{password}@{host}:{port}/{database}"
-engine = create_engine(connection_string)
-metadata = MetaData(bind=engine)
 
 # Define tables based on UML model
 users = Table('users', metadata,
