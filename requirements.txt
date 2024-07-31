@@ -1,2 +1,4 @@
 Flask==2.3.2
+pandas==1.5.3
+psycopg2_binary==2.9.9
 SQLAlchemy==1.4.37

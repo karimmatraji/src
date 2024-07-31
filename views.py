@@ -16,7 +16,7 @@ required_libraries = [
     'psycopg2-binary',
     'sqlalchemy'
 ]
-
+import psycopg2
 
 # Creating the Database Tables and Database Owner if not exist
 
