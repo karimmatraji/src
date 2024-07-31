@@ -1,24 +1,12 @@
 import random
 from flask import Flask, jsonify, request, render_template, redirect, url_for
 import pandas as pd
-from sqlalchemy import create_engine, MetaData, Table, insert, exc, Column, Integer, String, ForeignKey, DateTime, Text, Boolean
+from sqlalchemy import create_engine, MetaData, Table, insert, exc
 from sqlalchemy.sql import func
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 import logging
 from logging.handlers import RotatingFileHandler
-import subprocess
-import sys
-import os
-
-# Ensure libraries are installed
-required_libraries = [
-    'psycopg2-binary',
-    'sqlalchemy'
-]
-import psycopg2
-
-# Creating the Database Tables and Database Owner if not exist
 
 app = Flask(__name__)
 
@@ -35,176 +23,27 @@ logger.addHandler(handler)
 host = "localhost"
 port = "5432"
 database = "karim_database"
-username = "karim"
+username = "postgres"
 password = "Karim123*"
 connection_string = f"postgresql+psycopg2://{username}:{password}@{host}:{port}/{database}"
 engine = create_engine(connection_string)
 metadata = MetaData(bind=engine)
 
-def install_libraries(libraries):
-    for lib in libraries:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", lib])
-
-install_libraries(required_libraries)
-
-# Function to execute bash commands
-def execute_bash_command(command):
-    result = subprocess.run(command, shell=True, capture_output=True, text=True)
-    if result.returncode != 0:
-        raise Exception(f"Command failed: {command}\n{result.stderr}")
-    return result.stdout
-
-# Ensure PostgreSQL is installed and create a new user and database if they do not exist
-def setup_postgresql():
-    try:
-        # Check if PostgreSQL is installed
-        execute_bash_command("psql -V")
-    except Exception:
-        # Install PostgreSQL
-        install_commands = """
-        sudo apt update && \
-        sudo apt install -y curl ca-certificates && \
-        sudo install -d /usr/share/postgresql-common/pgdg && \
-        sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc && \
-        sudo sh -c 'echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list' && \
-        sudo apt update && \
-        sudo apt -y install postgresql
-        """
-        execute_bash_command(install_commands)
-
-    # Ensure the PostgreSQL service is started
-    execute_bash_command("sudo service postgresql start")
-
-    # Create a new PostgreSQL user and database if they don't exist
-    create_user_db_commands = f"""
-    sudo -i -u postgres psql -c "DO \\
-    \$do\$ \\
-    BEGIN \\
-       IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{username}') THEN \\
-           CREATE ROLE {username} WITH LOGIN PASSWORD '{password}'; \\
-       END IF; \\
-    END \\
-    \$do$;"
-    
-    sudo -i -u postgres psql -c "DO \\
-    \$do\$ \\
-    BEGIN \\
-       IF NOT EXISTS (SELECT FROM pg_database WHERE datname = '{database}') THEN \\
-           CREATE DATABASE {database} OWNER {username}; \\
-       END IF; \\
-    END \\
-    \$do$;"
-    
-    sudo -i -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE {database} TO {username};"
-    """
-    execute_bash_command(create_user_db_commands)
-
-setup_postgresql()
-
-# Define tables based on UML model
-users = Table('users', metadata,
-    Column('user_id', Integer, primary_key=True),
-    Column('username', String, nullable=False),
-    Column('email', String, unique=True, nullable=True),
-    Column('timestamp', DateTime, nullable=True),
-    Column('is_active', Boolean, nullable=True)
-)
-
-content = Table('content', metadata,
-    Column('content_id', Integer, primary_key=True),
-    Column('text', Text, nullable=True),
-    Column('geostamp', String, nullable=True),
-    Column('timestamp', DateTime, nullable=True)
-)
-
-media = Table('media', metadata,
-    Column('media_id', Integer, primary_key=True),
-    Column('post_id', Integer, ForeignKey('post.post_id'), nullable=True),
-    Column('url', String, nullable=True),
-    Column('type', String, nullable=True),
-    Column('timestamp', DateTime, nullable=True)
-)
-
-post = Table('post', metadata,
-    Column('post_id', Integer, primary_key=True),
-    Column('user_id', Integer, ForeignKey('users.user_id'), nullable=True),
-    Column('content_id', Integer, ForeignKey('content.content_id'), nullable=True),
-    Column('timestamp', DateTime, nullable=True),
-    Column('media_type', Text, nullable=True),
-    Column('media_url', String, nullable=True),
-    Column('caption', String, nullable=True),
-    Column('like_count', Integer, nullable=True),
-    Column('comment_count', Integer, nullable=True)
-)
-
-comment = Table('comment', metadata,
-    Column('comment_id', Integer, primary_key=True),
-    Column('post_id', Integer, ForeignKey('post.post_id'), nullable=True),
-    Column('user_id', Integer, ForeignKey('users.user_id'), nullable=True),
-    Column('text', Text, nullable=True),
-    Column('timestamp', DateTime, nullable=True)
-)
-
-likes = Table('likes', metadata,
-    Column('like_id', Integer, primary_key=True),
-    Column('post_id', Integer, ForeignKey('post.post_id'), nullable=True),
-    Column('user_id', Integer, ForeignKey('users.user_id'), nullable=True),
-    Column('timestamp', DateTime, nullable=True)
-)
-
-tags = Table('tags', metadata,
-    Column('tag_id', Integer, primary_key=True),
-    Column('name', String, nullable=True)
-)
-
-# Experiment Setting
-
-collection = Table('collection', metadata,
-    Column('collection_id', Integer, primary_key=True),
-    Column('harvesting_tech', Integer, nullable=True),
-    Column('time_window', String, nullable=True),
-    Column('geo_window', String, nullable=True),
-    Column('timestamp', DateTime, nullable=True)
-)
-
-business_rule = Table('business_rule', metadata,
-    Column('business_id', Integer, primary_key=True),
-    Column('business_rule', String, nullable=True)
-)
-
-experiment_tag = Table('experiment_tag', metadata,
-    Column('tag_id', Integer, primary_key=True),
-    Column('tag_name', String, nullable=True),
-    Column('content', String, nullable=True)
-)
-
-# Research Team
-
-experiment = Table('experiment', metadata,
-    Column('experiment_id', Integer, primary_key=True),
-    Column('team_id', Integer, ForeignKey('teams.team_id'), nullable=True),
-    Column('topic', String, nullable=True),
-    Column('period', DateTime, nullable=True)
-)
-
-teams = Table('teams', metadata,
-    Column('team_id', Integer, primary_key=True),
-    Column('name', String, nullable=True)
-)
-
-scientist = Table('scientist', metadata,
-    Column('scientist_id', Integer, primary_key=True),
-    Column('name', String, nullable=True),
-    Column('team_id', Integer, ForeignKey('teams.team_id'), nullable=True)
-)
-
-research_question = Table('research_question', metadata,
-    Column('rq_id', Integer, primary_key=True),
-    Column('research_question', String, nullable=True)
-)
-
-# Create tables if they don't exist
-metadata.create_all(engine)
+# load tables
+experiment = Table('experiment', metadata, autoload_with=engine)
+teams = Table('teams', metadata, autoload_with=engine)
+users = Table('users', metadata, autoload_with=engine)
+media = Table('media', metadata, autoload_with=engine)
+post = Table('post', metadata, autoload_with=engine)
+content = Table('content', metadata, autoload_with=engine)
+comment = Table('comment', metadata, autoload_with=engine)
+likes = Table('likes', metadata, autoload_with=engine)
+tags = Table('tags', metadata, autoload_with=engine)
+collection = Table('collection', metadata, autoload_with=engine)
+business_rule = Table('business_rule', metadata, autoload_with=engine)
+experiment_tag = Table('experiment_tag', metadata, autoload_with=engine)
+scientist = Table('scientist', metadata, autoload_with=engine)
+research_question = Table('research_question', metadata, autoload_with=engine)
 
 # Create a Session
 Session = sessionmaker(bind=engine)
@@ -406,4 +245,4 @@ def query():
     return render_template('query.html', tables=tables, table_data=table_data, columns=columns)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8000, debug=True)
+    app.run(host='0.0.0.0', port=8000, debug=True, use_reloader=False)
